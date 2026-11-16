@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.jsonl
+.gstack/
+server.log
+*.log
+
+# Your real org context stays local. Only the fictional example is committed.
+CLAUDE.md

@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daily Brief</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f9f9f9;
+      color: #111;
+      padding: 32px;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #111;
+      padding-bottom: 16px;
+      margin-bottom: 20px;
+    }
+    .header-left h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+    .header-left .date { font-size: 13px; color: #555; margin-top: 4px; }
+    .header-right { display: flex; gap: 10px; align-items: center; }
+
+    .generate-btn {
+      background: #111;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-family: inherit;
+      cursor: pointer;
+      border-radius: 2px;
+      font-weight: 600;
+    }
+    .generate-btn:hover:not(:disabled) { background: #333; }
+    .generate-btn:disabled { background: #aaa; cursor: not-allowed; }
+
+    .history-link {
+      font-size: 13px;
+      color: #555;
+      text-decoration: none;
+    }
+    .history-link:hover { color: #111; }
+
+    /* Status bar */
+    .status {
+      font-size: 12px;
+      color: #777;
+      margin-bottom: 16px;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      min-height: 20px;
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #4a9;
+      display: inline-block;
+      margin-right: 4px;
+    }
+    .sources { display: flex; gap: 8px; }
+    .source-tag {
+      font-size: 11px;
+      border: 1px solid #ccc;
+      padding: 2px 8px;
+      border-radius: 2px;
+      color: #555;
+    }
+    .source-tag.off { opacity: 0.4; text-decoration: line-through; }
+
+    /* Settings panel */
+    details.settings {
+      margin-bottom: 20px;
+      border: 1px solid #e0e0e0;
+      border-radius: 2px;
+    }
+    details.settings summary {
+      padding: 10px 16px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #555;
+      user-select: none;
+      list-style: none;
+    }
+    details.settings summary::-webkit-details-marker { display: none; }
+    details.settings summary::before { content: '▸ '; }
+    details.settings[open] summary::before { content: '▾ '; }
+    .settings-body {
+      padding: 16px;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+      background: #fff;
+    }
+    .toggle-group { display: flex; flex-direction: column; gap: 8px; }
+    .toggle-group label { font-size: 13px; font-weight: 600; color: #333; margin-bottom: 4px; }
+    .toggle-row { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+    .toggle-row input[type=checkbox] { cursor: pointer; }
+    .tone-select { font-size: 13px; font-family: inherit; border: 1px solid #ccc; padding: 4px 8px; border-radius: 2px; }
+    .settings-warning {
+      font-size: 12px;
+      color: #c00;
+      margin-top: 8px;
+      display: none;
+    }
+    .settings-warning.visible { display: block; }
+
+    /* Context upload panel */
+    .context-status { font-size: 12px; color: #777; margin-bottom: 12px; }
+    .context-status.ok { color: #4a9; }
+    .context-status.err { color: #c00; }
+    .upload-btn {
+      font-size: 13px;
+      font-family: inherit;
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 6px 14px;
+      border-radius: 2px;
+      cursor: pointer;
+      color: #333;
+    }
+    .upload-btn:hover { border-color: #999; color: #111; }
+
+    /* Brief content */
+    .brief-container {
+      background: #fff;
+      border: 1px solid #ddd;
+      padding: 28px 32px;
+      line-height: 1.7;
+      min-height: 200px;
+      overflow-x: auto;
+    }
+    .brief-container:has(> #empty-state) {
+      background: transparent;
+      border-color: transparent;
+      padding: 0;
+    }
+
+    /* Markdown rendered brief */
+    .brief-container h2 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #777;
+      margin: 24px 0 10px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 6px;
+    }
+    .brief-container h2:first-child { margin-top: 0; }
+    .brief-container h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #222;
+      margin: 16px 0 6px;
+    }
+    .brief-container h4 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #555;
+      margin: 12px 0 4px;
+    }
+    .brief-container p { font-size: 15px; color: #222; line-height: 1.75; margin-bottom: 12px; }
+    .brief-container ul { padding-left: 20px; margin-bottom: 12px; }
+    .brief-container li { font-size: 14px; color: #333; margin-bottom: 6px; line-height: 1.6; }
+    .brief-container strong { color: #111; }
+
+    /* Agenda table (Today section) */
+    .brief-container table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 12px;
+      font-size: 14px;
+      table-layout: fixed;
+    }
+    @media (max-width: 600px) {
+      body { padding: 16px; }
+      .brief-container { padding: 16px; }
+      .brief-container table { table-layout: auto; font-size: 13px; }
+      .brief-container th:first-child { width: 52px; }
+      .brief-container th:nth-child(2) { width: auto; }
+    }
+    .brief-container th {
+      text-align: left !important;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #777;
+      border-bottom: 1px solid #ddd;
+      padding: 6px 16px 6px 0;
+      font-weight: 600;
+    }
+    .brief-container th:first-child { width: 72px; }
+    .brief-container th:nth-child(2) { width: 180px; }
+    .brief-container td {
+      vertical-align: middle;
+      padding: 10px 16px 10px 0;
+      border-bottom: 1px solid #f0f0f0;
+      color: #222;
+      line-height: 1.5;
+      text-align: left !important;
+    }
+    .brief-container tr:last-child td { border-bottom: none; }
+    .brief-container td:first-child {
+      white-space: nowrap;
+      color: #666;
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Loading state */
+    .loading-placeholder {
+      border: 2px dashed #ccc;
+      background: #fafafa;
+      padding: 48px;
+      text-align: center;
+      color: #aaa;
+      font-size: 14px;
+    }
+    .loading-placeholder .hint { font-size: 12px; margin-top: 8px; color: #bbb; }
+
+    /* Streaming cursor */
+    .cursor { display: inline-block; width: 2px; height: 1em; background: #111; animation: blink 0.7s step-end infinite; vertical-align: text-bottom; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* Error state */
+    .error-msg {
+      color: #c00;
+      font-size: 14px;
+      padding: 16px;
+      background: #fff5f5;
+      border: 1px solid #f5c6c6;
+    }
+
+    /* Focus states */
+    :focus-visible {
+      outline: 2px solid #111;
+      outline-offset: 2px;
+    }
+
+    /* Footer */
+    .footer { margin-top: 16px; font-size: 12px; color: #999; text-align: right; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>Daily Brief</h1>
+    <div class="date" id="header-date"></div>
+  </div>
+  <div class="header-right">
+    <a class="history-link" href="/history">History</a>
+    <button class="generate-btn" id="generate-btn" onclick="generateBrief()">Generate Brief</button>
+  </div>
+</div>
+
+<div class="status" id="status-bar">
+  <span id="status-text"></span>
+  <div class="sources" id="source-tags"></div>
+</div>
+
+<!-- Settings panel -->
+<details class="settings" id="settings-panel">
+  <summary>Settings</summary>
+  <div class="settings-body">
+    <div class="toggle-group">
+      <label>Sources</label>
+      <div class="toggle-row"><input type="checkbox" id="cal-toggle" onchange="saveSettings(); updateSourceTags()"> Calendar</div>
+      <div class="toggle-row"><input type="checkbox" id="gmail-toggle" onchange="saveSettings(); updateSourceTags()"> Gmail</div>
+      <div class="toggle-row"><input type="checkbox" id="slack-toggle" onchange="saveSettings(); updateSourceTags()"> Slack</div>
+      <span class="settings-warning" id="all-off-warn">All sources off — brief will have no data.</span>
+    </div>
+    <div class="toggle-group">
+      <label>Tone</label>
+      <select class="tone-select" id="tone-select" onchange="saveSettings()">
+        <option value="concise">Concise</option>
+        <option value="standard" selected>Standard</option>
+        <option value="detailed">Detailed</option>
+      </select>
+    </div>
+    <div class="toggle-group">
+      <label>Schedule</label>
+      <div id="schedule-loading" style="font-size:12px;color:#aaa;">Loading…</div>
+      <div id="schedule-controls" style="display:none;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+          <label class="toggle-row"><input type="checkbox" id="day-0" value="0" onchange="saveConfig()"> Sun</label>
+          <label class="toggle-row"><input type="checkbox" id="day-1" value="1" onchange="saveConfig()"> Mon</label>
+          <label class="toggle-row"><input type="checkbox" id="day-2" value="2" onchange="saveConfig()"> Tue</label>
+          <label class="toggle-row"><input type="checkbox" id="day-3" value="3" onchange="saveConfig()"> Wed</label>
+          <label class="toggle-row"><input type="checkbox" id="day-4" value="4" onchange="saveConfig()"> Thu</label>
+          <label class="toggle-row"><input type="checkbox" id="day-5" value="5" onchange="saveConfig()"> Fri</label>
+          <label class="toggle-row"><input type="checkbox" id="day-6" value="6" onchange="saveConfig()"> Sat</label>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label style="font-size:12px;color:#555;">Time</label>
+          <input type="time" id="brief-time" style="font-size:12px;font-family:inherit;border:1px solid #ccc;padding:3px 6px;border-radius:2px;" onchange="saveConfig()">
+          <span id="cron-override-note" style="font-size:11px;color:#999;display:none;">(controlled by BRIEF_CRON)</span>
+        </div>
+      </div>
+      <span class="settings-warning" id="schedule-error"></span>
+    </div>
+  </div>
+</details>
+
+<details class="settings" id="context-panel">
+  <summary>Context (CLAUDE.md)</summary>
+  <div class="settings-body" style="flex-direction:column;gap:10px;">
+    <div class="context-status" id="context-status">Using bundled CLAUDE.md. Upload to override.</div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="upload-btn" onclick="document.getElementById('claude-md-input').click()">Upload CLAUDE.md</button>
+      <input type="file" id="claude-md-input" accept=".md,text/plain" style="display:none" onchange="uploadContext(this)">
+      <span style="font-size:12px;color:#999;">or paste below</span>
+    </div>
+    <textarea id="context-paste" rows="4" placeholder="Paste CLAUDE.md content here and click Upload…"
+      style="font-size:12px;font-family:inherit;border:1px solid #ddd;padding:8px;resize:vertical;border-radius:2px;width:100%;"></textarea>
+    <button class="upload-btn" onclick="uploadContextFromPaste()" style="align-self:flex-start;">Upload Pasted Content</button>
+  </div>
+</details>
+
+<div class="brief-container" id="brief-container">
+  <div class="loading-placeholder" id="empty-state">
+    No brief yet for today.
+    <div class="hint">Press "Generate Brief" to fetch your calendar, email, and Slack and write today's brief.</div>
+  </div>
+</div>
+
+<div class="footer" id="brief-footer"></div>
+
+<script>
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let currentBriefTs = null;
+let currentEventSource = null;
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+document.getElementById('header-date').textContent = new Date().toLocaleDateString('en-US', {
+  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+});
+
+loadSettings();
+updateSourceTags();
+
+// ---------------------------------------------------------------------------
+// Settings — localStorage + /config API
+// ---------------------------------------------------------------------------
+async function loadSettings() {
+  const cal = localStorage.getItem('cal') !== 'false';
+  const gmail = localStorage.getItem('gmail') !== 'false';
+  const slack = localStorage.getItem('slack') !== 'false';
+  const tone = localStorage.getItem('tone') || 'standard';
+
+  document.getElementById('cal-toggle').checked = cal;
+  document.getElementById('gmail-toggle').checked = gmail;
+  document.getElementById('slack-toggle').checked = slack;
+  document.getElementById('tone-select').value = tone;
+
+  // Load schedule config from server
+  try {
+    const res = await fetch('/config');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const cfg = await res.json();
+    applyScheduleConfig(cfg);
+  } catch (err) {
+    const errEl = document.getElementById('schedule-error');
+    errEl.textContent = 'Could not load schedule — using defaults.';
+    errEl.classList.add('visible');
+    applyScheduleConfig({ briefDays: [0,1,2,3,4,5,6], briefTime: '06:50', cronOverride: false });
+  }
+}
+
+function applyScheduleConfig(cfg) {
+  document.getElementById('schedule-loading').style.display = 'none';
+  document.getElementById('schedule-controls').style.display = '';
+  for (let d = 0; d <= 6; d++) {
+    document.getElementById('day-' + d).checked = cfg.briefDays.includes(d);
+  }
+  document.getElementById('brief-time').value = cfg.briefTime || '06:50';
+  const overrideNote = document.getElementById('cron-override-note');
+  const timeInput = document.getElementById('brief-time');
+  if (cfg.cronOverride) {
+    timeInput.disabled = true;
+    overrideNote.style.display = 'inline';
+  }
+}
+
+function saveSettings() {
+  localStorage.setItem('cal', document.getElementById('cal-toggle').checked);
+  localStorage.setItem('gmail', document.getElementById('gmail-toggle').checked);
+  localStorage.setItem('slack', document.getElementById('slack-toggle').checked);
+  localStorage.setItem('tone', document.getElementById('tone-select').value);
+}
+
+async function saveConfig() {
+  const briefDays = [0,1,2,3,4,5,6].filter(d => document.getElementById('day-' + d).checked);
+  const briefTime = document.getElementById('brief-time').value;
+  const errEl = document.getElementById('schedule-error');
+  errEl.textContent = '';
+  errEl.classList.remove('visible');
+  try {
+    const res = await fetch('/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ briefDays, briefTime }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      errEl.textContent = body.error || 'Failed to save schedule.';
+      errEl.classList.add('visible');
+    }
+  } catch {
+    errEl.textContent = 'Failed to save schedule.';
+    errEl.classList.add('visible');
+  }
+}
+
+function getSettings() {
+  return {
+    calendar: document.getElementById('cal-toggle').checked ? '1' : '0',
+    gmail: document.getElementById('gmail-toggle').checked ? '1' : '0',
+    slack: document.getElementById('slack-toggle').checked ? '1' : '0',
+    tone: document.getElementById('tone-select').value,
+  };
+}
+
+function updateSourceTags() {
+  const cal = document.getElementById('cal-toggle').checked;
+  const gmail = document.getElementById('gmail-toggle').checked;
+  const slack = document.getElementById('slack-toggle').checked;
+
+  const warn = document.getElementById('all-off-warn');
+  warn.classList.toggle('visible', !cal && !gmail && !slack);
+
+  // Also update status bar source tags if brief is shown
+  const existing = document.getElementById('source-tags').innerHTML;
+  // Only update if tags are visible
+  if (document.getElementById('source-tags').children.length > 0) {
+    renderSourceTags({ cal, gmail, slack });
+  }
+}
+
+function renderSourceTags({ cal, gmail, slack }) {
+  const tags = document.getElementById('source-tags');
+  tags.innerHTML = [
+    { label: '📅 Calendar', on: cal },
+    { label: '✉ Gmail', on: gmail },
+    { label: '💬 Slack', on: slack },
+  ].map(t => `<span class="source-tag${t.on ? '' : ' off'}">${t.label}</span>`).join('');
+}
+
+// ---------------------------------------------------------------------------
+// Generate Brief
+// ---------------------------------------------------------------------------
+function generateBrief() {
+  const btn = document.getElementById('generate-btn');
+  const container = document.getElementById('brief-container');
+  const footer = document.getElementById('brief-footer');
+  const statusText = document.getElementById('status-text');
+
+  // Abort any in-flight stream
+  if (currentEventSource) {
+    currentEventSource.close();
+    currentEventSource = null;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+
+  const settings = getSettings();
+  currentBriefTs = new Date().toISOString();
+  const startTime = Date.now();
+
+  // Show streaming state
+  container.innerHTML = '<div style="padding:12px 0;color:#999;font-size:13px;">Fetching your data…<span class="cursor"></span></div>';
+  footer.textContent = '';
+  statusText.innerHTML = '<span class="status-dot"></span>Generating…';
+  renderSourceTags({
+    cal: settings.calendar === '1',
+    gmail: settings.gmail === '1',
+    slack: settings.slack === '1',
+  });
+
+  const params = new URLSearchParams(settings);
+  const es = new EventSource('/api/brief?' + params.toString());
+  currentEventSource = es;
+
+  let rawText = '';
+  let firstChunk = true;
+
+  es.onmessage = function(event) {
+    if (event.data === '[DONE]') {
+      es.close();
+      currentEventSource = null;
+      btn.disabled = false;
+      btn.textContent = '↻ Regenerate';
+
+      // Remove streaming cursor, render final markdown
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      container.innerHTML = DOMPurify.sanitize(marked.parse(rawText));
+      statusText.innerHTML = `<span class="status-dot"></span>Generated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      footer.textContent = `Brief generated in ${elapsed}s`;
+      return;
+    }
+
+    const chunk = JSON.parse(event.data);
+    rawText += chunk;
+
+    if (firstChunk) {
+      container.innerHTML = '<div id="stream-text"></div><span class="cursor"></span>';
+      firstChunk = false;
+    }
+
+    const streamEl = document.getElementById('stream-text');
+    if (streamEl) {
+      streamEl.innerHTML = DOMPurify.sanitize(marked.parse(rawText));
+    }
+  };
+
+  es.addEventListener('error', function(event) {
+    const msg = event.data || 'Brief generation failed — try again.';
+    es.close();
+    currentEventSource = null;
+    btn.disabled = false;
+    btn.textContent = '↻ Regenerate';
+    const errEl = document.createElement('div');
+    errEl.className = 'error-msg';
+    try { errEl.textContent = '⚠ ' + (JSON.parse(msg) || msg); } catch { errEl.textContent = '⚠ ' + msg; }
+    container.replaceChildren(errEl);
+    statusText.textContent = '';
+  });
+
+  es.onerror = function() {
+    if (es.readyState === EventSource.CLOSED) return;
+    es.close();
+    currentEventSource = null;
+    btn.disabled = false;
+    btn.textContent = '↻ Regenerate';
+    container.innerHTML = '<div class="error-msg">⚠ Connection lost — try again.</div>';
+    statusText.textContent = '';
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Context upload
+// ---------------------------------------------------------------------------
+function uploadContext(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => sendContext(e.target.result);
+  reader.readAsText(file);
+  input.value = '';
+}
+
+function uploadContextFromPaste() {
+  const content = document.getElementById('context-paste').value.trim();
+  if (!content) return;
+  sendContext(content);
+}
+
+function sendContext(content) {
+  const status = document.getElementById('context-status');
+  status.className = 'context-status';
+  status.textContent = 'Uploading…';
+  fetch('/api/update-context', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: content,
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        status.className = 'context-status ok';
+        status.textContent = `✓ Updated — sections loaded: ${data.sections.join(', ')}. Effective immediately (persists until next deploy).`;
+        document.getElementById('context-paste').value = '';
+      } else {
+        status.className = 'context-status err';
+        status.textContent = `✗ Error: ${data.error}`;
+      }
+    })
+    .catch(() => {
+      status.className = 'context-status err';
+      status.textContent = '✗ Upload failed — try again.';
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Feedback — thumbs up/down on brief
+// ---------------------------------------------------------------------------
+function submitFeedback(type, rating, index, textSnippet) {
+  fetch('/api/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type,
+      rating,
+      index: index ?? null,
+      text_snippet: textSnippet || null,
+      brief_ts: currentBriefTs,
+    }),
+  }).catch(err => console.error('Feedback failed:', err));
+}
+</script>
+</body>
+</html>
